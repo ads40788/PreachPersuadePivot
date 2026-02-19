@@ -4,10 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Preach, Persuade &amp; Pivot</title>
+  
+  <!-- GoatCounter Analytics -->
+  <script data-goatcounter="https://preach-pursuade-pivot.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+  
   <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     body { margin: 0; background: #f9fafb; }
     button { touch-action: manipulation; }
@@ -15,8 +17,17 @@
 </head>
 <body>
   <div id="root"></div>
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
   <script type="text/babel">
-    const { useState, useCallback } = React;
+    if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+      document.getElementById('root').innerHTML = '<div style="padding: 20px;">Loading React libraries...</div>';
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      const { useState, useCallback } = React;
 
 
 const CANVAS_SIZE = 500;
@@ -38,6 +49,199 @@ const formatTurnDate = (turn) => {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 const weeksOut = (turn) => 12 - turn + 1;
+
+// ── Initial Condition Presets ─────────────────────────────────────────────
+const INITIAL_CONDITIONS = {
+  random: {
+    label: "Random",
+    desc: "Voters scattered uniformly, symmetric candidate positions",
+    voterGen: () => Array.from({ length: NUM_VOTERS }, (_, i) => ({
+      id: i,
+      x: Math.random() * CANVAS_SIZE,
+      y: Math.random() * CANVAS_SIZE,
+      excitement: 0.5,
+      connections: [],
+      homophilyRadius: null,
+    })),
+    playerPos: { x: CANVAS_SIZE * 0.3, y: CANVAS_SIZE * 0.5 },
+    opponentPos: { x: CANVAS_SIZE * 0.7, y: CANVAS_SIZE * 0.5 },
+    thirdParties: [],
+  },
+  
+  polarized: {
+    label: "Polarized Nation",
+    desc: "Two voter camps, candidates at opposite corners",
+    voterGen: () => {
+      const voters = [];
+      for (let i = 0; i < NUM_VOTERS; i++) {
+        const camp = Math.random() < 0.5 ? 0 : 1;
+        const baseX = camp === 0 ? CANVAS_SIZE * 0.2 : CANVAS_SIZE * 0.8;
+        const baseY = camp === 0 ? CANVAS_SIZE * 0.25 : CANVAS_SIZE * 0.75;
+        voters.push({
+          id: i,
+          x: baseX + (Math.random() - 0.5) * 80,
+          y: baseY + (Math.random() - 0.5) * 80,
+          excitement: 0.5,
+          connections: [],
+          homophilyRadius: null,
+        });
+      }
+      return voters;
+    },
+    playerPos: { x: CANVAS_SIZE * 0.15, y: CANVAS_SIZE * 0.2 },
+    opponentPos: { x: CANVAS_SIZE * 0.85, y: CANVAS_SIZE * 0.8 },
+    thirdParties: [],
+  },
+  
+  centerFight: {
+    label: "Fight for the Middle",
+    desc: "Moderate electorate, candidates start close together",
+    voterGen: () => {
+      const voters = [];
+      for (let i = 0; i < NUM_VOTERS; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.abs(Math.random() * 0.8 + Math.random() * 0.8 - 0.8) * 120; // normal-ish
+        voters.push({
+          id: i,
+          x: CANVAS_SIZE * 0.5 + Math.cos(angle) * radius,
+          y: CANVAS_SIZE * 0.5 + Math.sin(angle) * radius,
+          excitement: 0.5,
+          connections: [],
+          homophilyRadius: null,
+        });
+      }
+      return voters;
+    },
+    playerPos: { x: CANVAS_SIZE * 0.45, y: CANVAS_SIZE * 0.5 },
+    opponentPos: { x: CANVAS_SIZE * 0.55, y: CANVAS_SIZE * 0.5 },
+    thirdParties: [],
+  },
+  
+  fragmented: {
+    label: "Fragmented Electorate",
+    desc: "Many small clusters, symmetric start",
+    voterGen: () => {
+      const voters = [];
+      const clusters = [
+        { x: 100, y: 100 }, { x: 400, y: 100 }, { x: 250, y: 200 },
+        { x: 100, y: 350 }, { x: 400, y: 400 }, { x: 250, y: 300 }
+      ];
+      for (let i = 0; i < NUM_VOTERS; i++) {
+        const cluster = clusters[i % clusters.length];
+        voters.push({
+          id: i,
+          x: cluster.x + (Math.random() - 0.5) * 60,
+          y: cluster.y + (Math.random() - 0.5) * 60,
+          excitement: 0.5,
+          connections: [],
+          homophilyRadius: null,
+        });
+      }
+      return voters;
+    },
+    playerPos: { x: CANVAS_SIZE * 0.3, y: CANVAS_SIZE * 0.5 },
+    opponentPos: { x: CANVAS_SIZE * 0.7, y: CANVAS_SIZE * 0.5 },
+    thirdParties: [],
+  },
+  
+  crowdedField: {
+    label: "Crowded Field",
+    desc: "You're alone, opponent + third parties clustered together",
+    voterGen: () => {
+      const voters = [];
+      const clusters = [
+        { x: 380, y: 350, weight: 0.4 },  // big cluster where opposition starts
+        { x: 120, y: 120, weight: 0.25 }, // your territory
+        { x: 400, y: 100, weight: 0.2 },  // contested
+        { x: 100, y: 400, weight: 0.15 }  // fringe
+      ];
+      for (let i = 0; i < NUM_VOTERS; i++) {
+        const roll = Math.random();
+        let cumulative = 0;
+        let cluster = clusters[0];
+        for (const c of clusters) {
+          cumulative += c.weight;
+          if (roll < cumulative) { cluster = c; break; }
+        }
+        voters.push({
+          id: i,
+          x: cluster.x + (Math.random() - 0.5) * 70,
+          y: cluster.y + (Math.random() - 0.5) * 70,
+          excitement: 0.5,
+          connections: [],
+          homophilyRadius: null,
+        });
+      }
+      return voters;
+    },
+    playerPos: { x: CANVAS_SIZE * 0.15, y: CANVAS_SIZE * 0.15 },
+    opponentPos: { x: CANVAS_SIZE * 0.75, y: CANVAS_SIZE * 0.7 },
+    thirdParties: [
+      { x: CANVAS_SIZE * 0.78, y: CANVAS_SIZE * 0.65, isThirdParty: true, turnsActive: 0, partyName: "The Pizza Party" },
+      { x: CANVAS_SIZE * 0.72, y: CANVAS_SIZE * 0.73, isThirdParty: true, turnsActive: 0, partyName: "The Nap Party" }
+    ],
+  },
+  
+  insurgent: {
+    label: "Insurgent vs. Establishment",
+    desc: "You start at the fringe, opponent owns the center",
+    voterGen: () => {
+      const voters = [];
+      for (let i = 0; i < NUM_VOTERS; i++) {
+        if (Math.random() < 0.7) {
+          // 70% in center cluster
+          const angle = Math.random() * Math.PI * 2;
+          const radius = Math.random() * 80;
+          voters.push({
+            id: i,
+            x: CANVAS_SIZE * 0.55 + Math.cos(angle) * radius,
+            y: CANVAS_SIZE * 0.5 + Math.sin(angle) * radius,
+            excitement: 0.5,
+            connections: [],
+            homophilyRadius: null,
+          });
+        } else {
+          // 30% scattered at edges
+          const side = Math.floor(Math.random() * 4);
+          const x = side === 0 ? Math.random() * 100 : side === 1 ? 400 + Math.random() * 100 : Math.random() * CANVAS_SIZE;
+          const y = side === 2 ? Math.random() * 100 : side === 3 ? 400 + Math.random() * 100 : Math.random() * CANVAS_SIZE;
+          voters.push({ id: i, x, y, excitement: 0.5, connections: [], homophilyRadius: null });
+        }
+      }
+      return voters;
+    },
+    playerPos: { x: CANVAS_SIZE * 0.1, y: CANVAS_SIZE * 0.15 },
+    opponentPos: { x: CANVAS_SIZE * 0.55, y: CANVAS_SIZE * 0.5 },
+    thirdParties: [],
+  },
+  
+  fragmentedOpp: {
+    label: "Fragmented Opposition",
+    desc: "You own one cluster, they split another",
+    voterGen: () => {
+      const voters = [];
+      for (let i = 0; i < NUM_VOTERS; i++) {
+        const camp = Math.random() < 0.5 ? 0 : 1;
+        const baseX = camp === 0 ? CANVAS_SIZE * 0.2 : CANVAS_SIZE * 0.75;
+        const baseY = camp === 0 ? CANVAS_SIZE * 0.3 : CANVAS_SIZE * 0.65;
+        voters.push({
+          id: i,
+          x: baseX + (Math.random() - 0.5) * 70,
+          y: baseY + (Math.random() - 0.5) * 70,
+          excitement: 0.5,
+          connections: [],
+          homophilyRadius: null,
+        });
+      }
+      return voters;
+    },
+    playerPos: { x: CANVAS_SIZE * 0.2, y: CANVAS_SIZE * 0.3 },
+    opponentPos: { x: CANVAS_SIZE * 0.72, y: CANVAS_SIZE * 0.68 },
+    thirdParties: [
+      { x: CANVAS_SIZE * 0.78, y: CANVAS_SIZE * 0.62, isThirdParty: true, turnsActive: 0, partyName: "The Free Wi-Fi Party" }
+    ],
+  },
+};
 const THIRD_PARTY_THRESHOLD = 0.18;
 // Third party strength presets: [utility, dissolveThreshold, immunityTurns]
 const TP_STRENGTH_PRESETS = {
@@ -398,7 +602,7 @@ const WILD_CARD_EVENTS = [
     })}),
   },
   {
-    headline: `${state => state.opponentName} spotted at unpopular chain restaurant`,
+    headline: (state) => `${state.opponentName} spotted at unpopular chain restaurant`,
     flavor: "The optics are bad. Nobody agrees on why.",
     effect: (state) => ({ ...state, voters: applyEventEffect(state.voters, (v, n) => {
       const u = voterUtilities(v, state);
@@ -693,13 +897,17 @@ const makeVoters = () => {
   return voters;
 };
 
-const freshGame = (playerName = "") => {
+const freshGame = (playerName = "", preset = 'random') => {
   const oppName = pickOpponentName();
+  const condition = INITIAL_CONDITIONS[preset] || INITIAL_CONDITIONS.random;
+  const voters = condition.voterGen();
+  buildNetwork(voters);
+  
   return {
-    voters: makeVoters(),
-    player:   { x: CANVAS_SIZE * 0.3, y: CANVAS_SIZE * 0.5 },
-    opponent: { x: CANVAS_SIZE * 0.7, y: CANVAS_SIZE * 0.5 },
-    thirdParties: [],   // array of {x, y, isThirdParty, partyName}
+    voters,
+    player: condition.playerPos,
+    opponent: condition.opponentPos,
+    thirdParties: condition.thirdParties.map(tp => ({ ...tp })),   // copy to avoid mutation
     tpStrength: 'medium',
     currentTurn: 1,
     gameOver: false,
@@ -720,7 +928,7 @@ const applyAction = (state, action, isPlayer) => {
   const cand = state[key];
 
   if (action.type === "preach") {
-    const R = 132;  // 20% larger than original 110
+    const R = 165;  // 50% larger than original 110 (132 + 25%)
     return {
       ...state,
       voters: state.voters.map(v => {
@@ -730,7 +938,7 @@ const applyAction = (state, action, isPlayer) => {
     };
   }
   if (action.type === "pivot") {
-    const STEP = 50;  // 20% larger than 42
+    const STEP = 44;  // ~5% larger than original 42 (reduced from 63)
     return {
       ...state,
       [key]: {
@@ -741,13 +949,27 @@ const applyAction = (state, action, isPlayer) => {
     };
   }
   if (action.type === "persuade") {
-    const R = 156;  // 20% larger than 130
-    const STR = 0.24;  // 20% stronger than 0.2
+    const isDirectional = action.direction && action.direction !== 'omni';
+    const R = isDirectional ? 275 : 195;  // directional gets 40% more range
+    const STR = isDirectional ? 0.36 : 0.30;  // directional is 20% stronger
+    
     return {
       ...state,
       voters: state.voters.map(v => {
         const d = dist(v, cand);
         if (d < R && d > 8) {
+          // Check if voter is in the target direction
+          if (isDirectional) {
+            const dx = v.x - cand.x;
+            const dy = v.y - cand.y;
+            const inDirection = 
+              (action.direction === 'up' && dy < -20) ||
+              (action.direction === 'down' && dy > 20) ||
+              (action.direction === 'left' && dx < -20) ||
+              (action.direction === 'right' && dx > 20);
+            if (!inDirection) return v;
+          }
+          
           const eff = STR * (1 - d / R);
           return { ...v, x: v.x + (cand.x - v.x) * eff, y: v.y + (cand.y - v.y) * eff };
         }
@@ -774,7 +996,7 @@ const assignMixedHomophily = (voters) => {
 
 const applyVoterInfluence = (state, opts) => {
   if (!opts.voterInfluenceEnabled) return state;
-  const STR = 0.14;  // 20% stronger than 0.12
+  const STR = 0.175;  // ~46% stronger than original 0.12
   const isMixed = opts.homophily === 'mixed';
   const maxR = isMixed ? null : HOMOPHILY_RADIUS[opts.homophily || 'open-minded'];
 
@@ -1001,6 +1223,7 @@ function PoliticalGame() {
     politicalFightingEnabled: false,
     tpStrength: 'medium',
     difficulty: 'medium',
+    initialCondition: 'random',
   });
   const [pendingPlayerName, setPendingPlayerName] = useState("");
   const [currentEvent, setCurrentEvent] = useState(null); // {headline, flavor} or null
@@ -1289,7 +1512,7 @@ function PoliticalGame() {
   }, [gs, isPlayerTurn, opts, opponentMove]);
 
   const resetGame = () => {
-    const newGame = freshGame(pendingPlayerName);
+    const newGame = freshGame(pendingPlayerName, opts.initialCondition);
     // If mixed homophily mode, assign personal radii to each voter
     if (opts.homophily === 'mixed') {
       assignMixedHomophily(newGame.voters);
@@ -1376,6 +1599,23 @@ function PoliticalGame() {
                   medium: 'Reads the polls. Pivots when losing, mobilises when ahead.',
                   hard:   'Strategic. Targets your weak spots and consolidates late.',
                 }[opts.difficulty || 'medium']}
+              </p>
+            </div>
+
+            {/* Initial conditions */}
+            <div>
+              <p className="font-semibold mb-1.5">🗺️ Starting Scenario</p>
+              <select
+                value={opts.initialCondition}
+                onChange={(e) => setOpts(o => ({ ...o, initialCondition: e.target.value }))}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-white"
+              >
+                {Object.entries(INITIAL_CONDITIONS).map(([key, { label, desc }]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                {INITIAL_CONDITIONS[opts.initialCondition]?.desc || ""}
               </p>
             </div>
 
@@ -1857,11 +2097,31 @@ function PoliticalGame() {
                 <div className="font-semibold text-sm">📣 Preach</div>
                 <div className="text-xs opacity-75">Excite nearby voters</div>
               </button>
-              <button onClick={() => doAction("persuade")} disabled={!isPlayerTurn}
-                className="p-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-lg transition-colors text-left">
-                <div className="font-semibold text-sm">🤝 Persuade</div>
-                <div className="text-xs opacity-75">Pull voters toward you</div>
-              </button>
+              <div className={`p-2 rounded-lg border min-h-[88px] ${isPlayerTurn ? "bg-orange-50 border-orange-200" : "bg-gray-100 border-gray-200"}`}>
+                <div className="text-xs font-semibold text-center mb-1 text-orange-700">🤝 Persuade</div>
+                <div className="grid grid-cols-3 gap-0.5">
+                  {/* Row 1: up arrow */}
+                  <div />
+                  <button onClick={() => doAction("persuade", { direction: "up" })} disabled={!isPlayerTurn}
+                    className={`p-1.5 text-lg rounded ${isPlayerTurn ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-gray-200 text-gray-400"}`}>↓</button>
+                  <div />
+                  
+                  {/* Row 2: left, omni, right */}
+                  <button onClick={() => doAction("persuade", { direction: "left" })} disabled={!isPlayerTurn}
+                    className={`p-1.5 text-lg rounded ${isPlayerTurn ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-gray-200 text-gray-400"}`}>→</button>
+                  <button onClick={() => doAction("persuade", { direction: "omni" })} disabled={!isPlayerTurn}
+                    className={`p-1 text-sm rounded ${isPlayerTurn ? "bg-orange-600 hover:bg-orange-700 text-white font-bold" : "bg-gray-300 text-gray-400"}`}
+                    title="Pull from all directions">●</button>
+                  <button onClick={() => doAction("persuade", { direction: "right" })} disabled={!isPlayerTurn}
+                    className={`p-1.5 text-lg rounded ${isPlayerTurn ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-gray-200 text-gray-400"}`}>←</button>
+                  
+                  {/* Row 3: down arrow */}
+                  <div />
+                  <button onClick={() => doAction("persuade", { direction: "down" })} disabled={!isPlayerTurn}
+                    className={`p-1.5 text-lg rounded ${isPlayerTurn ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-gray-200 text-gray-400"}`}>↑</button>
+                  <div />
+                </div>
+              </div>
               <div className={`p-2 rounded-lg border ${isPlayerTurn ? "bg-indigo-50 border-indigo-200" : "bg-gray-100 border-gray-200"}`}>
                 <div className="text-xs font-semibold text-center mb-1 text-indigo-700">🧭 Pivot</div>
                 <div className="grid grid-cols-3 gap-0.5">
@@ -2112,17 +2372,29 @@ function PoliticalGame() {
         );
       })()}
 
-      <p className="mt-3 text-center text-xs text-gray-400">
-        Spatial voting · color = lean · hover voters for probabilities
-      </p>
+      {/* Footer byline */}
+      <div className="mt-6 pt-4 border-t border-gray-200 text-center">
+        <p className="text-xs text-gray-400 mb-2">
+          Spatial voting · color = lean · hover voters for probabilities
+        </p>
+        <p className="text-xs text-gray-500">
+          Built by{" "}
+          <a href="https://www.antoniosirianni.com/" target="_blank" rel="noopener noreferrer" 
+             className="text-blue-600 hover:underline font-medium">Tony</a>
+          {" · "}
+          <a href="https://github.com/ads40788" target="_blank" rel="noopener noreferrer"
+             className="text-gray-500 hover:text-gray-700">View source</a>
+        </p>
+      </div>
     </div>
   );
 }
 
 
-    ReactDOM.createRoot(document.getElementById("root")).render(
-      React.createElement(PoliticalGame)
-    );
+      ReactDOM.createRoot(document.getElementById("root")).render(
+        React.createElement(PoliticalGame)
+      );
+    }
   </script>
 </body>
 </html>
